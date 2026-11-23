@@ -315,10 +315,13 @@ DEFINITIONS in the process."
 (defmethod stabilize progn
     ((definition generic-function-definition) definitions packages pathnames
      &aux (combination-type-name
+	   #+sbcl
 	   (sb-pcl::method-combination-type-name
+	    (generic-function-method-combination (generic definition)))
+	   #+ccl
+	   (ccl::method-combination-name
 	    (generic-function-method-combination (generic definition))))
-	  (combination
-	   (gethash combination-type-name sb-pcl::**method-combinations**)))
+	  (combination (combination-by-name combination-type-name)))
   "Compute generic function DEFINITION's methods, and combination definition."
   (setf (methods definition)
 	(retain (generic definition) definitions
@@ -355,10 +358,7 @@ DEFINITIONS in the process."
   "Compute method combination DEFINITION's users."
   ;; #### NOTE: a case could be made to avoid rebuilding the whole list here,
   ;; and only add what's missing, but I don't think it's worth the trouble.
-  (mapc
-      (lambda (cache-entry)
-	(sb-impl::map-hashset
-	 (lambda (generic)
+  (flet ((add-client (generic)
 	   (let ((client (find-definition generic definitions)))
 	     (cond (client
 		    (endpush client clients))
@@ -367,10 +367,25 @@ DEFINITIONS in the process."
 		     (destabilize definitions
 		       (new-generic-definition
 			generic packages pathnames))
-		     clients)))))
-	 (sb-pcl::method-combination-%generic-functions
-	  (cdr cache-entry))))
-    (sb-pcl::method-combination-info-cache (combination definition)))
+		     clients))))))
+    #+sbcl
+    (mapc
+	(lambda (cache-entry)
+	  (sb-impl::map-hashset
+	   #'add-client
+	   (sb-pcl::method-combination-%generic-functions
+	    (cdr cache-entry))))
+      (sb-pcl::method-combination-info-cache (combination definition)))
+    ;; #### NOTE: CCL's registry of the generic functions using a method
+    ;; combination is not maintained, so we have to scan all of them. Some
+    ;; internal ones don't have a method combination at all.
+    #+ccl
+    (dolist (generic (ccl::population-data ccl::%all-gfs%))
+      (when (and (slot-boundp generic 'method-combination)
+		 (eq (ccl::method-combination-name
+		      (generic-function-method-combination generic))
+		     (definition-symbol definition)))
+	(add-client generic))))
   (setf (clients definition) clients))
 
 ;; #### PORTME.
@@ -380,11 +395,15 @@ DEFINITIONS in the process."
   ;; method combination info structure. However, since we have made sure that
   ;; there is at least one actual combination object in the cache, in
   ;; MAKE-COMBINATION-DEFINITION, we can just look into that one.
-   &aux (name (sb-pcl::short-combination-operator
+   &aux (name #+sbcl
+	      (sb-pcl::short-combination-operator
 	       (cdr
 		(first
 		 (sb-pcl::method-combination-info-cache
-		  (combination definition)))))))
+		  (combination definition)))))
+	      #+ccl
+	      (getf (ccl::mci.options (combination definition)) :operator
+		    (definition-symbol definition))))
   "Compute short combination DEFINITION's standalone combinator definition."
   (unless (standalone-combinator definition)
     (setf (standalone-combinator definition)

@@ -496,7 +496,8 @@ which see:
 ;; #### PORTME.
 (defun combination-options (definition)
   "Return generic function DEFINITION's method combination options."
-  (sb-pcl::method-combination-options
+  (#+sbcl sb-pcl::method-combination-options
+   #+ccl ccl::method-combination-options
    (generic-function-method-combination (generic definition))))
 
 (defun make-generic-function-definition
@@ -557,16 +558,24 @@ These are generic functions using this combination."
   ;; since we have made sure that there is at least one actual combination
   ;; object in the cache, in MAKE-COMBINATION-DEFINITION, we can just look
   ;; into that one.
+  #+sbcl
   (documentation
    (cdr
     (first
      (sb-pcl::method-combination-info-cache (combination definition))))
-   t))
+   t)
+  ;; #### NOTE: CCL attaches the docstring to the name.
+  #+ccl
+  (documentation (definition-symbol definition) 'method-combination))
 
 ;; #### PORTME.
 (defmethod lambda-list ((definition combination-definition))
   "Return method combination DEFINITION's lambda-list."
-  (sb-pcl::method-combination-info-lambda-list (combination definition)))
+  ;; #### WARNING: CCL doesn't keep this information, so we return NIL.
+  #+sbcl
+  (sb-pcl::method-combination-info-lambda-list (combination definition))
+  #+ccl
+  nil)
 
 
 ;; #### WARNING: the CLHS specifies that the :operator argument to
@@ -591,10 +600,14 @@ protocols, which see:
   ;; obvious in the method combination info structure. However, since we have
   ;; made sure that there is at least one actual combination object in the
   ;; cache, in MAKE-COMBINATION-DEFINITION, we can just look into that one.
+  #+sbcl
   (sb-pcl::short-combination-identity-with-one-argument
    (cdr
     (first
-     (sb-pcl::method-combination-info-cache (combination definition))))))
+     (sb-pcl::method-combination-info-cache (combination definition)))))
+  #+ccl
+  (getf (ccl::mci.options (combination definition))
+	:identity-with-one-argument))
 
 
 (defclass long-combination-definition (combination-definition)
@@ -618,10 +631,16 @@ protocols, which see:
 The concrete class of the new definition depends on the COMBINATION type."
   (make-instance
       (etypecase instance
-	(sb-pcl::short-method-combination 'short-combination-definition)
-	(sb-pcl::long-method-combination 'long-combination-definition)
+	(#+sbcl sb-pcl::short-method-combination
+	 #+ccl ccl:short-method-combination
+	 'short-combination-definition)
+	(#+sbcl sb-pcl::long-method-combination
+	 #+ccl ccl:long-method-combination
+	 'long-combination-definition)
 	;; this one had better be foreign...
-	(sb-pcl::standard-method-combination 'combination-definition))
+	(#+sbcl sb-pcl::standard-method-combination
+	 #+ccl ccl:standard-method-combination
+	 'combination-definition))
     :symbol symbol :combination combination :foreign foreign))
 
 

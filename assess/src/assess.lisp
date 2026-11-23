@@ -372,7 +372,11 @@ Domesticity is defined in relation to domestic PACKAGES and PATHNAMES; see
   ;; SOURCE-BY-NAME protocol, NOT by the SOURCE-BY-OBJECT one. Indeed,
   ;; the later would return the method-combination-info structure's source
   ;; information, which is an internal SBCL file.
-  (when-let (combination (gethash symbol sb-pcl::**method-combinations**))
+  ;;
+  ;; CCL has a similar registry of method combination information, but it
+  ;; doesn't contain actual method combination objects. See
+  ;; COMBINATION-BY-NAME.
+  (when-let (combination (combination-by-name symbol))
     (when (domesticp symbol (source-by-name symbol :method-combination)
 		     packages pathnames)
       (endpush (make-combination-definition symbol combination) definitions)))

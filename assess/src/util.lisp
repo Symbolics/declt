@@ -133,6 +133,20 @@ FUNCTION may be a function, a generic function, or a macro function."
 	  (t
 	   (values (ccl:arglist function))))))
 
+;; #### PORTME.
+(defun combination-by-name (name)
+  "Return the method combination object for NAME, or NIL.
+This object represents the method combination as a general entity, as opposed
+to any of its instantiations with specific options."
+  #+sbcl
+  (gethash name sb-pcl::**method-combinations**)
+  ;; #### NOTE: in CCL, this is an information vector, except for the standard
+  ;; method combination, which doesn't have any (and is a regular instance).
+  #+ccl
+  (if (eq name 'standard)
+    ccl::*standard-method-combination*
+    (ccl::method-combination-info name)))
+
 
 
 
