@@ -277,6 +277,13 @@ and methods for classes or conditions slots."))
   (make-instance 'macro-definition
     :symbol symbol :macro macro :foreign foreign))
 
+;; #### NOTE: CCL attaches a macro's docstring to its name, not to the macro
+;; function.
+#+ccl
+(defmethod docstring ((definition macro-definition))
+  "Return macro DEFINITION's docstring."
+  (documentation (definition-symbol definition) 'function))
+
 
 
 ;; Compiler macros
