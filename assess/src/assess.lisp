@@ -243,17 +243,17 @@ Lambda expression are not considered as proper names, so NIL is returned."
 Domesticity is defined in relation to domestic PACKAGES and PATHNAMES; see
 `domesticp'."
   ;; Constants.
-  (when (and (eql (sb-int:info :variable :kind symbol) :constant)
+  (when (and (eql (variable-kind symbol) :constant)
 	     (domesticp symbol (source-by-name symbol :constant)
 			packages pathnames))
     (endpush (make-constant-definition symbol) definitions))
   ;; Special variables.
-  (when (and (eql (sb-int:info :variable :kind symbol) :special)
+  (when (and (eql (variable-kind symbol) :special)
 	     (domesticp symbol (source-by-name symbol :variable)
 			packages pathnames))
     (endpush (make-special-definition symbol) definitions))
   ;; Symbol macros.
-  (when (and (eql (sb-int:info :variable :kind symbol) :macro)
+  (when (and (eql (variable-kind symbol) :macro)
 	     (domesticp symbol (source-by-name symbol :symbol-macro)
 			packages pathnames))
     (endpush (make-symbol-macro-definition symbol) definitions))

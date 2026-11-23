@@ -90,6 +90,17 @@
       (ccl:find-definition-sources (ccl::sd-name object) 'structure))
      (otherwise (ccl:find-definition-sources object)))))
 
+;; #### PORTME.
+(defun variable-kind (symbol)
+  "Return SYMBOL's variable kind.
+Only :constant, :special, and :macro (for symbol macros) are of interest."
+  #+sbcl
+  (sb-int:info :variable :kind symbol)
+  #+ccl
+  (cond ((constantp symbol) :constant)
+	((ccl::proclaimed-special-p symbol) :special)
+	((nth-value 1 (macroexpand-1 symbol)) :macro)))
+
 
 
 
