@@ -114,6 +114,25 @@ function."
   (let ((expander (ccl::%setf-method symbol)))
     (if (and expander (symbolp expander)) (list expander) expander)))
 
+;; #### PORTME.
+(defun function-lambda-list (function)
+  "Return FUNCTION's lambda list.
+FUNCTION may be a function, a generic function, or a macro function."
+  #+sbcl
+  (sb-introspect:function-lambda-list function)
+  ;; #### WARNING: CCL only keeps the lambda lists of macros (by name) and
+  ;; generic functions. For ordinary functions, it reconstructs one from the
+  ;; compiled code (which loses default values, and supplied-p parameters).
+  ;; For compiler macros, we cannot get it at all, so we return NIL.
+  #+ccl
+  (let ((name (ccl:function-name function)))
+    (cond ((and (consp name) (eq (first name) 'compiler-macro-function))
+	   nil)
+	  ((and (symbolp name) (eq function (macro-function name)))
+	   (values (ccl:arglist name)))
+	  (t
+	   (values (ccl:arglist function))))))
+
 
 
 

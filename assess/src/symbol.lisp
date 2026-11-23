@@ -213,7 +213,7 @@ All funcoid definitions respond to the following public protocols, which see:
   (:method ((definition funcoid-definition))
     "Return funcoid DEFINITION's function lambda-list.
 This is the default method."
-    (sb-introspect:function-lambda-list (funcoid definition)))
+    (function-lambda-list (funcoid definition)))
   (:method :around ((definition funcoid-definition))
     "Return only the lambda-list's CDR for setf definitions.
 This only applies to compiler macros and functions (to filter out the
@@ -316,7 +316,11 @@ and methods for classes or conditions slots."))
 ;; #### PORTME.
 (defmethod lambda-list ((definition type-definition))
   "Return type DEFINITION's type lambda-list."
-  (sb-introspect:deftype-lambda-list (definition-symbol definition)))
+  ;; #### WARNING: CCL doesn't keep this information, so we return NIL.
+  #+sbcl
+  (sb-introspect:deftype-lambda-list (definition-symbol definition))
+  #+ccl
+  nil)
 
 
 
@@ -381,7 +385,7 @@ update-fn lambda-list, because setf expanders pass the new value as the last
 argument to their operator.
 If the expander's update-fn is not defined, return two values: NIL and T."
   (if fdefinition
-    (let ((lambda-list (sb-introspect:function-lambda-list fdefinition)))
+    (let ((lambda-list (function-lambda-list fdefinition)))
       (when-let (&aux (position '&aux lambda-list))
 	(setq lambda-list (subseq lambda-list 0 &aux)))
       (when-let (&key (position '&key lambda-list))
@@ -405,9 +409,15 @@ DEFSETF, or DEFINE-SETF-EXPANDER."))
 (defmethod lambda-list ((definition long-expander-definition)
 			&aux (expander (expander definition)))
   "Return long setf expander DEFINITION's expander function's lambda-list."
+  #+ccl
+  (declare (ignore expander))
+  ;; #### WARNING: CCL doesn't keep this information, so we return NIL.
+  #+sbcl
   (etypecase expander
     (list (sb-introspect:function-lambda-list (cdr expander)))
-    (function (sb-introspect:function-lambda-list expander))))
+    (function (sb-introspect:function-lambda-list expander)))
+  #+ccl
+  nil)
 
 
 (defun make-expander-definition (symbol expander &optional foreign)
