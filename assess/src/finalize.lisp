@@ -189,7 +189,7 @@ DEFINITIONS in the process."
 			      (eq (definition-symbol candidate) name)))
 		       definitions)))
 	(unless (or expander-for (foreignp definition))
-	  (when-let (expander (sb-int:info :setf :expander name))
+	  (when-let (expander (setf-expander name))
 	    (setq expander-for
 		  (destabilize definitions
 		    (make-expander-definition

@@ -101,6 +101,19 @@ Only :constant, :special, and :macro (for symbol macros) are of interest."
 	((ccl::proclaimed-special-p symbol) :special)
 	((nth-value 1 (macroexpand-1 symbol)) :macro)))
 
+;; #### PORTME.
+(defun setf-expander (symbol)
+  "Return SYMBOL's setf expander, or NIL.
+A short form expander is a list the CAR of which is the name of its update
+function."
+  #+sbcl
+  (sb-int:info :setf :expander symbol)
+  ;; #### NOTE: for the short form of DEFSETF, CCL only stores the name of the
+  ;; update function, so we wrap it in a list.
+  #+ccl
+  (let ((expander (ccl::%setf-method symbol)))
+    (if (and expander (symbolp expander)) (list expander) expander)))
+
 
 
 

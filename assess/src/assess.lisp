@@ -290,7 +290,7 @@ Domesticity is defined in relation to domestic PACKAGES and PATHNAMES; see
 	  (endpush (make-compiler-macro-alias-definition symbol t)
 		   definitions)))))
   ;; Setf expanders.
-  (when-let (expander (sb-int:info :setf :expander symbol))
+  (when-let (expander (setf-expander symbol))
     (when (domesticp symbol (source-by-name symbol :setf-expander)
 		     packages pathnames)
       (endpush (make-expander-definition symbol expander) definitions)))
@@ -415,7 +415,8 @@ Domesticity is defined in relation to domestic PACKAGES and PATHNAMES; see
 	  (dolist (slot-definition (direct-slots structure-definition))
 	    (endpush slot-definition definitions))))))
   ;; Types.
-  (when-let (expander (sb-int:info :type :expander symbol))
+  (when-let (expander #+sbcl (sb-int:info :type :expander symbol)
+		      #+ccl (ccl::%deftype-expander symbol))
     (when (domesticp symbol (source-by-name symbol :type)
 		     packages pathnames)
       (endpush (make-type-definition symbol expander) definitions)))
