@@ -750,8 +750,17 @@ These are conditions, structures, and classes."))
   "Compute classoid DEFINITION's foreign status."
   (setf (foreignp definition)
 	(not
-	 (domesticp (class-name classoid) (source-by-object classoid)
+	 ;; #### NOTE: CCL's typed structure descriptions are not classes.
+	 (domesticp #+sbcl (class-name classoid)
+		    #+ccl (definition-symbol definition)
+		    (source-by-object classoid)
 	   packages pathnames))))
+
+;; #### NOTE: CCL doesn't have a dedicated metaclass for conditions.
+#+ccl
+(defun condition-class-p (classoid)
+  "Return T if CLASSOID is a condition class."
+  (and (typep classoid 'class) (subtypep classoid 'condition)))
 
 ;; #### PORTME.
 (defun make-classoid-definition (symbol classoid packages pathnames)
@@ -762,9 +771,15 @@ The concrete class of the new definition (structure, class, or condition)
 depends on the kind of CLASSOID."
   (make-instance
       (typecase classoid
-	(sb-pcl::condition-class 'condition-definition)
-	(sb-pcl::structure-class 'clos-structure-definition)
-	(sb-kernel:defstruct-description 'typed-structure-definition)
+	(#+sbcl sb-pcl::condition-class
+	 #+ccl (satisfies condition-class-p)
+	 'condition-definition)
+	(#+sbcl sb-pcl::structure-class
+	 #+ccl structure-class
+	 'clos-structure-definition)
+	(#+sbcl sb-kernel:defstruct-description
+	 #+ccl simple-vector
+	 'typed-structure-definition)
 	(otherwise 'class-definition))
     :symbol symbol :classoid classoid :packages packages :pathnames pathnames))
 
@@ -859,6 +874,7 @@ It is T for list structures, but may be something else for vector ones."
 ;; removed access to it from the outside, even with xref-for-internals. So now
 ;; I have to duplicate it. See https://sourceforge.net/p/sbcl/mailman/sbcl-devel/thread/m2frrzkwnt.fsf%40didierverna.net/#msg58798783
 ;; #### PORTME.
+#+sbcl
 (defmacro dd-element-type (dd)
   "Duplication of SBCL's macro."
   `(case (sb-kernel::dd-type ,dd)
@@ -880,21 +896,34 @@ It is T for list structures, but may be something else for vector ones."
      &aux (structure (definition-structure definition))
 	  (source (source-by-object structure)))
   "Compute typed structure DEFINITION's type, element type, and slots."
-  (setf (structure-type definition) (sb-kernel:dd-type structure))
-  (setf (element-type definition) (dd-element-type structure))
-  (dolist (slot (sb-kernel:dd-slots structure))
+  ;; #### NOTE: CCL's structure type is either LIST, VECTOR, or (VECTOR
+  ;; ELEMENT-TYPE).
+  (setf (structure-type definition)
+	#+sbcl (sb-kernel:dd-type structure)
+	#+ccl (let ((type (ccl::sd-type structure)))
+		(if (consp type) (first type) type)))
+  (setf (element-type definition)
+	#+sbcl (dd-element-type structure)
+	#+ccl (let ((type (ccl::sd-type structure)))
+		(if (consp type) (second type) t)))
+  (dolist (slot #+sbcl (sb-kernel:dd-slots structure)
+		#+ccl (structure-slots structure))
     (let ((slot-definition
 	    (make-typed-structure-slot-definition
 	     slot
-	     (not (domesticp (sb-kernel:dsd-name slot) source
-		    packages pathnames)))))
+	     (not (domesticp #+sbcl (sb-kernel:dsd-name slot)
+			     #+ccl (first slot)
+			     source packages pathnames)))))
       (setf (owner slot-definition) definition)
       (endpush slot-definition (direct-slots definition)))))
 
 ;; #### PORTME.
 (defmethod docstring ((definition typed-structure-definition))
   "Return typed structure DEFINITION's docstring."
-  (sb-kernel::dd-doc (definition-structure definition)))
+  #+sbcl
+  (sb-kernel::dd-doc (definition-structure definition))
+  #+ccl
+  (documentation (ccl::sd-name (definition-structure definition)) 'type))
 
 
 
@@ -952,7 +981,10 @@ see:
 ;; #### PORTME.
 (defmethod docstring ((definition clos-slot-definition))
   "Return CLOS slot DEFINITION's docstring."
-  (sb-pcl::%slot-definition-documentation (slot definition)))
+  #+sbcl
+  (sb-pcl::%slot-definition-documentation (slot definition))
+  #+ccl
+  (documentation (slot definition) t))
 
 (defmethod value-type ((definition clos-slot-definition))
   "Return CLOS slot DEFINITION's value type."
@@ -979,7 +1011,7 @@ see:
 (defun make-typed-structure-slot-definition (slot &optional foreign)
   "Make a new typed structure SLOT definition, possibly FOREIGN."
   (make-instance 'typed-structure-slot-definition
-    :symbol (sb-kernel:dsd-name slot)
+    :symbol #+sbcl (sb-kernel:dsd-name slot) #+ccl (first slot)
     :slot slot
     :foreign foreign))
 
@@ -990,7 +1022,10 @@ see:
 ;; #### PORTME.
 (defmethod value-type ((definition typed-structure-slot-definition))
   "Return typed structure slot DEFINITION's value type."
-  (sb-kernel:dsd-type (slot definition)))
+  #+sbcl
+  (sb-kernel:dsd-type (slot definition))
+  #+ccl
+  (second (slot definition)))
 
 
 

@@ -540,7 +540,8 @@ DEFINITIONS in the process."
 (defun stabilize-clos-classoid-slot
     (definition definitions packages pathnames
      &aux (slot (slot definition))
-	  (classoid (sb-pcl::slot-definition-class slot)))
+	  (classoid #+sbcl (sb-pcl::slot-definition-class slot)
+		    #+ccl (ccl::slot-definition-class slot)))
   "Compute CLOS classoid slot DEFINITION's reader and writer definitions.
 This function is used for regular class and condition slots."
   ;; #### NOTE: a case could be made to avoid rebuilding the whole list here,
@@ -633,7 +634,17 @@ This function is used for regular class and condition slots."
   ;; to perform one test each time.
   (unless (readers definition)
     (let* ((reader-name
-	     (sb-pcl::slot-definition-defstruct-accessor-symbol slot))
+	     #+sbcl
+	     (sb-pcl::slot-definition-defstruct-accessor-symbol slot)
+	     ;; #### NOTE: CCL doesn't have this, so we need to go through the
+	     ;; structure's reader names, by position.
+	     #+ccl
+	     (third
+	      (find (slot-definition-name slot)
+		  (structure-slots
+		   (gethash (class-name (ccl::slot-definition-class slot))
+			    ccl::%defstructs%))
+		:key #'first)))
 	   (writer-name `(setf ,reader-name))
 	   (reader (fdefinition reader-name))
 	   (writer (when (fboundp writer-name) (fdefinition writer-name)))
@@ -675,7 +686,8 @@ This function is used for regular class and condition slots."
     ((definition clos-slot-definition) definitions packages pathnames)
   "Compute CLOS slot DEFINITION's reader and writer definitions."
   (typecase (slot definition)
-    (sb-pcl::structure-direct-slot-definition
+    (#+sbcl sb-pcl::structure-direct-slot-definition
+     #+ccl ccl::structure-direct-slot-definition
      (stabilize-clos-structure-slot definition definitions packages pathnames))
     (otherwise
      (stabilize-clos-classoid-slot definition definitions packages pathnames))))
@@ -698,7 +710,8 @@ This function is used for regular class and condition slots."
   ;; to perform one test each time (on the reader, though, because a slot may
   ;; be read-only).
   (unless (readers definition)
-    (let* ((reader-name (sb-kernel:dsd-accessor-name slot))
+    (let* ((reader-name #+sbcl (sb-kernel:dsd-accessor-name slot)
+			#+ccl (third slot))
 	   (writer-name `(setf ,reader-name))
 	   (reader (fdefinition reader-name))
 	   (writer (when (fboundp writer-name) (fdefinition writer-name)))

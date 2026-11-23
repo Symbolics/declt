@@ -410,7 +410,10 @@ Domesticity is defined in relation to domestic PACKAGES and PATHNAMES; see
 	  (dolist (slot-definition (direct-slots classoid-definition))
 	    (endpush slot-definition definitions))))))
   ;; Typed structures.
-  (when-let (structure (sb-int:info :typed-structure :info symbol))
+  (when-let (structure #+sbcl (sb-int:info :typed-structure :info symbol)
+		       #+ccl (when-let (description
+					(gethash symbol ccl::%defstructs%))
+			       (when (ccl::sd-type description) description)))
     (let ((source (source-by-object structure)))
       (when (domesticp symbol source packages pathnames)
 	(let ((structure-definition

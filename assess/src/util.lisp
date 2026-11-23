@@ -147,6 +147,22 @@ to any of its instantiations with specific options."
     ccl::*standard-method-combination*
     (ccl::method-combination-info name)))
 
+;; #### NOTE: CCL's structure descriptions (CCL::SD-... accessors) are used for
+;; both typed and CLOS structures. They don't have a dedicated object
+;; representing a slot, and the reader names are kept in a separate list, so
+;; we reconstruct slot descriptions for them.
+#+ccl
+(defun structure-slots (description)
+  "Return structure DESCRIPTION's slots.
+Each slot is a list of the form (NAME TYPE READER-NAME)."
+  (mapcar (lambda (slot reader-name)
+	    (list (ccl::ssd-name slot) (ccl::ssd-type slot) reader-name))
+      ;; Typed structures may have an extra slot for their name, which is
+      ;; identified by a number instead of a symbol.
+      (remove-if-not #'symbolp (ccl::sd-slots description)
+		     :key (lambda (slot) (ccl::ssd-name slot)))
+    (ccl::sd-refnames description)))
+
 
 
 
