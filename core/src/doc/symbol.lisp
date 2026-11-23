@@ -736,7 +736,9 @@ methods get the new value as their first argument."
 		   ;; #### WARNING: casing policy.
 		   (otherwise
 		    (format nil "~(~S~)"
-		      (sb-pcl::specializer-type specializer))))))
+		      #+sbcl (sb-pcl::specializer-type specializer)
+		      #+ccl (list 'eql
+				  (ccl:eql-specializer-object specializer)))))))
 
 (defmethod document :open
     ((definition method-definition) context &key inline writer)
