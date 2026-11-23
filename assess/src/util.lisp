@@ -38,17 +38,57 @@
 ;; first one. This is okay because we actually use it only when there can be
 ;; only one definition source.
 
+;; #### NOTE: CCL's FIND-DEFINITION-SOURCES returns a list of entries of the
+;; form ((TYPE . NAME) SOURCE ...) where SOURCE is either a source note, or
+;; directly a file name. Also, CCL may record logical pathnames (e.g. for
+;; files loaded from Quicklisp), which would never be EQUAL to the physical
+;; ones that ASDF knows about, so we need to translate them.
+#+ccl
+(defun ccl-source-pathname (sources)
+  "Return the physical pathname of the first of CCL's SOURCES, or NIL."
+  (when-let* ((source (second (first sources)))
+	      (file (if (ccl:source-note-p source)
+		      (ccl:source-note-filename source)
+		      source)))
+    (translate-logical-pathname (pathname file))))
+
 ;; #### PORTME.
 (defun source-by-name (name type)
   "Return source pathname for NAMEd object of TYPE."
+  #+sbcl
   (when-let (sources (sb-introspect:find-definition-sources-by-name name type))
-    (sb-introspect:definition-source-pathname (first sources))))
+    (sb-introspect:definition-source-pathname (first sources)))
+  ;; #### NOTE: CCL records setf expanders under the accessor's name.
+  #+ccl
+  (ccl-source-pathname
+   (ccl:find-definition-sources
+       (if (and (eq type :setf-expander) (consp name)) (second name) name)
+     (ecase type
+       (:constant 'ccl::constant)
+       (:variable 'variable)
+       (:symbol-macro 'ccl::symbol-macro)
+       (:setf-expander 'ccl::setf-expander)
+       (:method-combination 'method-combination)
+       (:type 'type)
+       (:structure 'structure)))))
 
 ;; #### PORTME.
 (defun source-by-object (object)
   "Return OBJECT's source pathname."
+  #+sbcl
   (when-let (source (sb-introspect:find-definition-source object))
-    (sb-introspect:definition-source-pathname source)))
+    (sb-introspect:definition-source-pathname source))
+  ;; #### NOTE: CCL doesn't record the source of structure classes (nor of
+  ;; typed structure descriptions) under the object itself, but only under the
+  ;; structure's name.
+  #+ccl
+  (ccl-source-pathname
+   (typecase object
+     (structure-class
+      (ccl:find-definition-sources (class-name object) 'structure))
+     (simple-vector
+      (ccl:find-definition-sources (ccl::sd-name object) 'structure))
+     (otherwise (ccl:find-definition-sources object)))))
 
 
 
