@@ -180,6 +180,43 @@ See `subsystems' for more information."
 ;; Package definitions
 ;; -------------------
 
+;; #### NOTE: UIOP:DEFINE-PACKAGE expands to a runtime call to
+;; UIOP:ENSURE-PACKAGE, so the resulting package has no recorded source. We
+;; cannot rely on introspection alone because UIOP leaves no trace, and a
+;; package that only reexports symbols has no definitions to infer it from.
+;; So we need to look at the source files.
+;; #### WARNING: forms are read with the standard readtable, except that #.
+;; is inert (its form is read but not evaluated). Symbols are read into a
+;; temporary package, so that we don't pollute the ones that we are looking
+;; at. Reading stops at the first error, in which case the packages found so
+;; far are returned.
+(defun pathname-defined-packages
+    (pathname &aux (*package* (make-package (symbol-name (gensym)) :use nil))
+		   (*readtable* (copy-readtable nil))
+		   packages)
+  "Return the list of packages defined by toplevel forms in Lisp file PATHNAME.
+Both DEFPACKAGE and DEFINE-PACKAGE forms are recognized. Packages that don't
+exist are ignored."
+  (set-dispatch-macro-character #\# #\.
+    (lambda (stream subchar arg)
+      (declare (ignore subchar arg))
+      (read stream t nil t)
+      nil))
+  (unwind-protect
+      (ignore-errors
+	(with-open-file (stream pathname)
+	  (loop :for form := (read stream nil stream)
+		:until (eq form stream)
+		:when (and (consp form)
+			   (symbolp (car form))
+			   (member (symbol-name (car form))
+				   '("DEFPACKAGE" "DEFINE-PACKAGE")
+				   :test #'string=))
+		  :do (when-let (package (find-package (second form)))
+			(pushnew package packages)))))
+    (delete-package *package*))
+  packages)
+
 (defun make-all-package-definitions
     (file-definitions system-definitions
      &aux (packages (list-all-packages))
@@ -188,6 +225,11 @@ See `subsystems' for more information."
 	  (pathnames (mapcar (lambda (definition)
 			       (component-pathname (file definition)))
 		       file-definitions))
+	  (defined-packages
+	    (mapcan (lambda (definition)
+		      (pathname-defined-packages
+		       (component-pathname (file definition))))
+	      (remove-if-not #'lisp-file-definition-p file-definitions)))
 	  (prefixes (mapcar (lambda (definition)
 			      (concatenate 'string
 				(component-name (system definition))
@@ -196,12 +238,15 @@ See `subsystems' for more information."
 	  definitions)
   "Return a list of all package definitions for FILE- and SYSTEM-DEFINITIONS.
 This list contains definitions for packages defined in the corresponding
-files, or for which the source is not found, but the name is of the form
-SYSTEM/... (case insensitive) for one of the corresponding systems."
+files, or for which the source is not found, but which are defined by a
+toplevel form in one of the corresponding Lisp files (see
+`pathname-defined-packages'), or the name is of the form SYSTEM/... (case
+insensitive) for one of the corresponding systems."
   (dolist (package packages)
     (let ((pathname (source-by-object package))
 	  (name (package-name package)))
       (when (or (member pathname pathnames :test #'equal)
+		(and (null pathname) (member package defined-packages))
 		;; #### FIXME: remind me why we need that stuff?
 		;; #### WARNING: shaky heuristic, bound to fail one day or
 		;; another.
