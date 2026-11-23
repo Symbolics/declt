@@ -202,10 +202,10 @@ method combinations, and types.
 All funcoid definitions respond to the following public protocols, which see:
 - `lambda-list'."))
 
-(defmethod name :around
-    ((definition funcoid-definition) &aux (name (call-next-method)))
+(defmethod name :around ((definition funcoid-definition))
   "Wrap funcoid DEFINITION's name in a SETF list when appropriate."
-  (if (setfp definition) (list 'setf name) name))
+  (let ((name (call-next-method)))
+    (if (setfp definition) (list 'setf name) name)))
 
 (defgeneric lambda-list (definition)
   (:documentation "Return funcoid DEFINITION's lambda-list.")
@@ -214,15 +214,15 @@ All funcoid definitions respond to the following public protocols, which see:
     "Return funcoid DEFINITION's function lambda-list.
 This is the default method."
     (sb-introspect:function-lambda-list (funcoid definition)))
-  (:method :around
-      ((definition funcoid-definition) &aux (lambda-list (call-next-method)))
+  (:method :around ((definition funcoid-definition))
     "Return only the lambda-list's CDR for setf definitions.
 This only applies to compiler macros and functions (to filter out the
 parameter corresponding to the new value) but does nothing on setf expanders
 because their primary methods already do the filtering (differently)."
-    (if (and (setfp definition) (not (typep definition 'expander-definition)))
-      (cdr lambda-list)
-      lambda-list)))
+    (let ((lambda-list (call-next-method)))
+      (if (and (setfp definition) (not (typep definition 'expander-definition)))
+	(cdr lambda-list)
+	lambda-list))))
 
 
 ;; #### NOTE: in a similar vein as the comment above about the setf property,
@@ -1009,10 +1009,10 @@ Aliases are defined dynamically so it's impossible to locate the code
 being executed."
   nil)
 
-(defmethod name :around
-    ((definition alias-definition) &aux (name (call-next-method)))
+(defmethod name :around ((definition alias-definition))
   "Wrap alias DEFINITION's name in a SETF list when appropriate."
-  (if (setfp definition) (list 'setf name) name))
+  (let ((name (call-next-method)))
+    (if (setfp definition) (list 'setf name) name)))
 
 ;; #### WARNING: we keep the referee's semantics wrt its own setf property
 ;; here. Let's just hope we don't get any weird mixtures of setf and non-setf

@@ -123,13 +123,13 @@ Documentation is done in a @table environment."
 (defmethod safe-name :around
     ((definition file-definition)
      &optional qualify
-     &aux (name (call-next-method))
-	  (extension (extension definition)))
+     &aux (extension (extension definition)))
   "Append DEFINITION's file extension at the end, when applicable."
   (declare (ignore qualify))
-  (when extension
-    (setq name (concatenate 'string name "." (reveal extension))))
-  name)
+  (let ((name (call-next-method)))
+    (when extension
+      (setq name (concatenate 'string name "." (reveal extension))))
+    name))
 
 (defmethod category-name ((definition file-definition))
   "Return \"file\""
