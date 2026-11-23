@@ -406,8 +406,9 @@ Domesticity is defined in relation to domestic PACKAGES and PATHNAMES; see
 	  (dolist (slot-definition (direct-slots classoid-definition))
 	    (endpush slot-definition definitions))))))
   ;; Typed structures.
+  ;; #### NOTE: see the comment about SOURCE-PATHNAME in symbol.lisp.
   (when-let (structure (sb-int:info :typed-structure :info symbol))
-    (let ((source (source-by-object structure)))
+    (let ((source (source-by-name symbol :structure)))
       (when (domesticp symbol source packages pathnames)
 	(let ((structure-definition
 		(make-classoid-definition symbol structure packages pathnames)))
