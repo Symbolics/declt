@@ -232,7 +232,8 @@ Lambda expression are not considered as proper names, so NIL is returned."
     (etypecase name
       (symbol name)
       (list (case (first name)
-	      ((macro-function compiler-macro) (second name))
+	      ((macro-function compiler-macro #+ccl compiler-macro-function)
+	       (second name))
 	      (setf name)
 	      (otherwise nil))))))
 
