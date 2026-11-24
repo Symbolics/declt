@@ -202,10 +202,10 @@ method combinations, and types.
 All funcoid definitions respond to the following public protocols, which see:
 - `lambda-list'."))
 
-(defmethod name :around
-    ((definition funcoid-definition) &aux (name (call-next-method)))
+(defmethod name :around ((definition funcoid-definition))
   "Wrap funcoid DEFINITION's name in a SETF list when appropriate."
-  (if (setfp definition) (list 'setf name) name))
+  (let ((name (call-next-method)))
+    (if (setfp definition) (list 'setf name) name)))
 
 (defgeneric lambda-list (definition)
   (:documentation "Return funcoid DEFINITION's lambda-list.")
@@ -213,16 +213,16 @@ All funcoid definitions respond to the following public protocols, which see:
   (:method ((definition funcoid-definition))
     "Return funcoid DEFINITION's function lambda-list.
 This is the default method."
-    (sb-introspect:function-lambda-list (funcoid definition)))
-  (:method :around
-      ((definition funcoid-definition) &aux (lambda-list (call-next-method)))
+    (function-lambda-list (funcoid definition)))
+  (:method :around ((definition funcoid-definition))
     "Return only the lambda-list's CDR for setf definitions.
 This only applies to compiler macros and functions (to filter out the
 parameter corresponding to the new value) but does nothing on setf expanders
 because their primary methods already do the filtering (differently)."
-    (if (and (setfp definition) (not (typep definition 'expander-definition)))
-      (cdr lambda-list)
-      lambda-list)))
+    (let ((lambda-list (call-next-method)))
+      (if (and (setfp definition) (not (typep definition 'expander-definition)))
+	(cdr lambda-list)
+	lambda-list))))
 
 
 ;; #### NOTE: in a similar vein as the comment above about the setf property,
@@ -277,6 +277,13 @@ and methods for classes or conditions slots."))
   (make-instance 'macro-definition
     :symbol symbol :macro macro :foreign foreign))
 
+;; #### NOTE: CCL attaches a macro's docstring to its name, not to the macro
+;; function.
+#+ccl
+(defmethod docstring ((definition macro-definition))
+  "Return macro DEFINITION's docstring."
+  (documentation (definition-symbol definition) 'function))
+
 
 
 ;; Compiler macros
@@ -316,7 +323,11 @@ and methods for classes or conditions slots."))
 ;; #### PORTME.
 (defmethod lambda-list ((definition type-definition))
   "Return type DEFINITION's type lambda-list."
-  (sb-introspect:deftype-lambda-list (definition-symbol definition)))
+  ;; #### WARNING: CCL doesn't keep this information, so we return NIL.
+  #+sbcl
+  (sb-introspect:deftype-lambda-list (definition-symbol definition))
+  #+ccl
+  nil)
 
 
 
@@ -381,7 +392,7 @@ update-fn lambda-list, because setf expanders pass the new value as the last
 argument to their operator.
 If the expander's update-fn is not defined, return two values: NIL and T."
   (if fdefinition
-    (let ((lambda-list (sb-introspect:function-lambda-list fdefinition)))
+    (let ((lambda-list (function-lambda-list fdefinition)))
       (when-let (&aux (position '&aux lambda-list))
 	(setq lambda-list (subseq lambda-list 0 &aux)))
       (when-let (&key (position '&key lambda-list))
@@ -405,9 +416,15 @@ DEFSETF, or DEFINE-SETF-EXPANDER."))
 (defmethod lambda-list ((definition long-expander-definition)
 			&aux (expander (expander definition)))
   "Return long setf expander DEFINITION's expander function's lambda-list."
+  #+ccl
+  (declare (ignore expander))
+  ;; #### WARNING: CCL doesn't keep this information, so we return NIL.
+  #+sbcl
   (etypecase expander
     (list (sb-introspect:function-lambda-list (cdr expander)))
-    (function (sb-introspect:function-lambda-list expander))))
+    (function (sb-introspect:function-lambda-list expander)))
+  #+ccl
+  nil)
 
 
 (defun make-expander-definition (symbol expander &optional foreign)
@@ -486,7 +503,8 @@ which see:
 ;; #### PORTME.
 (defun combination-options (definition)
   "Return generic function DEFINITION's method combination options."
-  (sb-pcl::method-combination-options
+  (#+sbcl sb-pcl::method-combination-options
+   #+ccl ccl::method-combination-options
    (generic-function-method-combination (generic definition))))
 
 (defun make-generic-function-definition
@@ -547,16 +565,24 @@ These are generic functions using this combination."
   ;; since we have made sure that there is at least one actual combination
   ;; object in the cache, in MAKE-COMBINATION-DEFINITION, we can just look
   ;; into that one.
+  #+sbcl
   (documentation
    (cdr
     (first
      (sb-pcl::method-combination-info-cache (combination definition))))
-   t))
+   t)
+  ;; #### NOTE: CCL attaches the docstring to the name.
+  #+ccl
+  (documentation (definition-symbol definition) 'method-combination))
 
 ;; #### PORTME.
 (defmethod lambda-list ((definition combination-definition))
   "Return method combination DEFINITION's lambda-list."
-  (sb-pcl::method-combination-info-lambda-list (combination definition)))
+  ;; #### WARNING: CCL doesn't keep this information, so we return NIL.
+  #+sbcl
+  (sb-pcl::method-combination-info-lambda-list (combination definition))
+  #+ccl
+  nil)
 
 
 ;; #### WARNING: the CLHS specifies that the :operator argument to
@@ -581,10 +607,14 @@ protocols, which see:
   ;; obvious in the method combination info structure. However, since we have
   ;; made sure that there is at least one actual combination object in the
   ;; cache, in MAKE-COMBINATION-DEFINITION, we can just look into that one.
+  #+sbcl
   (sb-pcl::short-combination-identity-with-one-argument
    (cdr
     (first
-     (sb-pcl::method-combination-info-cache (combination definition))))))
+     (sb-pcl::method-combination-info-cache (combination definition)))))
+  #+ccl
+  (getf (ccl::mci.options (combination definition))
+	:identity-with-one-argument))
 
 
 (defclass long-combination-definition (combination-definition)
@@ -608,10 +638,16 @@ protocols, which see:
 The concrete class of the new definition depends on the COMBINATION type."
   (make-instance
       (etypecase instance
-	(sb-pcl::short-method-combination 'short-combination-definition)
-	(sb-pcl::long-method-combination 'long-combination-definition)
+	(#+sbcl sb-pcl::short-method-combination
+	 #+ccl ccl:short-method-combination
+	 'short-combination-definition)
+	(#+sbcl sb-pcl::long-method-combination
+	 #+ccl ccl:long-method-combination
+	 'long-combination-definition)
 	;; this one had better be foreign...
-	(sb-pcl::standard-method-combination 'combination-definition))
+	(#+sbcl sb-pcl::standard-method-combination
+	 #+ccl ccl:standard-method-combination
+	 'combination-definition))
     :symbol symbol :combination combination :foreign foreign))
 
 
@@ -724,6 +760,12 @@ These are conditions, structures, and classes."))
 	 (domesticp (definition-symbol definition) (source-pathname definition)
 	   packages pathnames))))
 
+;; #### NOTE: CCL doesn't have a dedicated metaclass for conditions.
+#+ccl
+(defun condition-class-p (classoid)
+  "Return T if CLASSOID is a condition class."
+  (and (typep classoid 'class) (subtypep classoid 'condition)))
+
 ;; #### PORTME.
 (defun make-classoid-definition (symbol classoid packages pathnames)
   "Make a new CLASSOID definition for SYMBOL.
@@ -733,9 +775,15 @@ The concrete class of the new definition (structure, class, or condition)
 depends on the kind of CLASSOID."
   (make-instance
       (typecase classoid
-	(sb-pcl::condition-class 'condition-definition)
-	(sb-pcl::structure-class 'clos-structure-definition)
-	(sb-kernel:defstruct-description 'typed-structure-definition)
+	(#+sbcl sb-pcl::condition-class
+	 #+ccl (satisfies condition-class-p)
+	 'condition-definition)
+	(#+sbcl sb-pcl::structure-class
+	 #+ccl structure-class
+	 'clos-structure-definition)
+	(#+sbcl sb-kernel:defstruct-description
+	 #+ccl simple-vector
+	 'typed-structure-definition)
 	(otherwise 'class-definition))
     :symbol symbol :classoid classoid :packages packages :pathnames pathnames))
 
@@ -830,6 +878,7 @@ It is T for list structures, but may be something else for vector ones."
 ;; removed access to it from the outside, even with xref-for-internals. So now
 ;; I have to duplicate it. See https://sourceforge.net/p/sbcl/mailman/sbcl-devel/thread/m2frrzkwnt.fsf%40didierverna.net/#msg58798783
 ;; #### PORTME.
+#+sbcl
 (defmacro dd-element-type (dd)
   "Duplication of SBCL's macro."
   `(case (sb-kernel::dd-type ,dd)
@@ -851,21 +900,34 @@ It is T for list structures, but may be something else for vector ones."
      &aux (structure (definition-structure definition))
 	  (source (source-pathname definition)))
   "Compute typed structure DEFINITION's type, element type, and slots."
-  (setf (structure-type definition) (sb-kernel:dd-type structure))
-  (setf (element-type definition) (dd-element-type structure))
-  (dolist (slot (sb-kernel:dd-slots structure))
+  ;; #### NOTE: CCL's structure type is either LIST, VECTOR, or (VECTOR
+  ;; ELEMENT-TYPE).
+  (setf (structure-type definition)
+	#+sbcl (sb-kernel:dd-type structure)
+	#+ccl (let ((type (ccl::sd-type structure)))
+		(if (consp type) (first type) type)))
+  (setf (element-type definition)
+	#+sbcl (dd-element-type structure)
+	#+ccl (let ((type (ccl::sd-type structure)))
+		(if (consp type) (second type) t)))
+  (dolist (slot #+sbcl (sb-kernel:dd-slots structure)
+		#+ccl (structure-slots structure))
     (let ((slot-definition
 	    (make-typed-structure-slot-definition
 	     slot
-	     (not (domesticp (sb-kernel:dsd-name slot) source
-		    packages pathnames)))))
+	     (not (domesticp #+sbcl (sb-kernel:dsd-name slot)
+			     #+ccl (first slot)
+			     source packages pathnames)))))
       (setf (owner slot-definition) definition)
       (endpush slot-definition (direct-slots definition)))))
 
 ;; #### PORTME.
 (defmethod docstring ((definition typed-structure-definition))
   "Return typed structure DEFINITION's docstring."
-  (sb-kernel::dd-doc (definition-structure definition)))
+  #+sbcl
+  (sb-kernel::dd-doc (definition-structure definition))
+  #+ccl
+  (documentation (ccl::sd-name (definition-structure definition)) 'type))
 
 ;; #### WARNING: the source information must be retrieved with the
 ;; SOURCE-BY-NAME protocol, NOT by the SOURCE-BY-OBJECT one. Indeed, the
@@ -931,7 +993,10 @@ see:
 ;; #### PORTME.
 (defmethod docstring ((definition clos-slot-definition))
   "Return CLOS slot DEFINITION's docstring."
-  (sb-pcl::%slot-definition-documentation (slot definition)))
+  #+sbcl
+  (sb-pcl::%slot-definition-documentation (slot definition))
+  #+ccl
+  (documentation (slot definition) t))
 
 (defmethod value-type ((definition clos-slot-definition))
   "Return CLOS slot DEFINITION's value type."
@@ -958,7 +1023,7 @@ see:
 (defun make-typed-structure-slot-definition (slot &optional foreign)
   "Make a new typed structure SLOT definition, possibly FOREIGN."
   (make-instance 'typed-structure-slot-definition
-    :symbol (sb-kernel:dsd-name slot)
+    :symbol #+sbcl (sb-kernel:dsd-name slot) #+ccl (first slot)
     :slot slot
     :foreign foreign))
 
@@ -969,7 +1034,10 @@ see:
 ;; #### PORTME.
 (defmethod value-type ((definition typed-structure-slot-definition))
   "Return typed structure slot DEFINITION's value type."
-  (sb-kernel:dsd-type (slot definition)))
+  #+sbcl
+  (sb-kernel:dsd-type (slot definition))
+  #+ccl
+  (second (slot definition)))
 
 
 
@@ -1017,10 +1085,10 @@ Aliases are defined dynamically so it's impossible to locate the code
 being executed."
   nil)
 
-(defmethod name :around
-    ((definition alias-definition) &aux (name (call-next-method)))
+(defmethod name :around ((definition alias-definition))
   "Wrap alias DEFINITION's name in a SETF list when appropriate."
-  (if (setfp definition) (list 'setf name) name))
+  (let ((name (call-next-method)))
+    (if (setfp definition) (list 'setf name) name)))
 
 ;; #### WARNING: we keep the referee's semantics wrt its own setf property
 ;; here. Let's just hope we don't get any weird mixtures of setf and non-setf

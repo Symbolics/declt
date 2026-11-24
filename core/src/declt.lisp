@@ -462,7 +462,7 @@ Concepts, functions, variables and data types")
 		       :direction :output
 		       :if-exists :supersede
 		       :if-does-not-exist :create
-		       :external-format :utf8)
+		       :external-format :utf-8)
 	(render-header report file-name info-name info-category
 		       (declt-notice context) current-time-string)
 	(render-top-node top-node)

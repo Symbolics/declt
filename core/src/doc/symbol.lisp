@@ -672,24 +672,23 @@ permitted."
 
 ;; Methods
 (defmethod safe-name :around
-    ((definition method-definition)
-     &optional qualified
-     &aux (safe-name (call-next-method)))
+    ((definition method-definition) &optional qualified)
   "When QUALIFIED, append method DEFINITION's qualifiers and specializers."
-  (if qualified
-    (concatenate 'string
-      safe-name
-      ;; #### NOTE: I'm using an S for qualifiers, assuming they'll always be
-      ;; symbols, in order to distinguish keywords from the rest.
-      (format nil "~{ ~S~} (~{~A~^ ~})"
-	(qualifiers definition)
-	(mapcar (lambda (specializer)
-		  (typecase specializer
-		    (definition (safe-name specializer t))
-		    ;; EQL specializer
-		    (otherwise (format nil "~S" specializer))))
-	  (specializers definition))))
-    safe-name))
+  (let ((safe-name (call-next-method)))
+    (if qualified
+      (concatenate 'string
+	safe-name
+	;; #### NOTE: I'm using an S for qualifiers, assuming they'll always be
+	;; symbols, in order to distinguish keywords from the rest.
+	(format nil "~{ ~S~} (~{~A~^ ~})"
+	  (qualifiers definition)
+	  (mapcar (lambda (specializer)
+		    (typecase specializer
+		      (definition (safe-name specializer t))
+		      ;; EQL specializer
+		      (otherwise (format nil "~S" specializer))))
+	    (specializers definition))))
+      safe-name)))
 
 (defmethod category-name ((definition method-definition))
   "Return \"method\"."
@@ -737,7 +736,9 @@ methods get the new value as their first argument."
 		   ;; #### WARNING: casing policy.
 		   (otherwise
 		    (format nil "~(~S~)"
-		      (sb-pcl::specializer-type specializer))))))
+		      #+sbcl (sb-pcl::specializer-type specializer)
+		      #+ccl (list 'eql
+				  (ccl:eql-specializer-object specializer)))))))
 
 (defmethod document :open
     ((definition method-definition) context &key inline writer)
@@ -903,13 +904,12 @@ methods, and initargs references."
 
 ;; Slots
 (defmethod safe-name :around
-    ((definition slot-definition)
-     &optional qualified
-     &aux (safe-name (call-next-method)))
+    ((definition slot-definition) &optional qualified)
   "When QUALIFIED, prepend slot DEFINITION's classoid safe name."
-  (if qualified
-    (concatenate 'string (safe-name (owner definition) t) "->" safe-name)
-    safe-name))
+  (let ((safe-name (call-next-method)))
+    (if qualified
+      (concatenate 'string (safe-name (owner definition) t) "->" safe-name)
+      safe-name)))
 
 (defmethod category-name ((definition slot-definition))
   "Return \"slot\"."

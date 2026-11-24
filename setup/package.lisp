@@ -31,7 +31,7 @@
   (:documentation "The Declt setup library's package.")
   (:use :cl)
   ;; #### PORTME.
-  (:import-from #+sbcl :sb-mop
+  (:import-from #+sbcl :sb-mop #+ccl :ccl
     :validate-superclass)
   (:import-from :named-readtables
     :defreadtable :in-readtable)

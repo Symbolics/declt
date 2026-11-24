@@ -38,17 +38,130 @@
 ;; first one. This is okay because we actually use it only when there can be
 ;; only one definition source.
 
+;; #### NOTE: CCL's FIND-DEFINITION-SOURCES returns a list of entries of the
+;; form ((TYPE . NAME) SOURCE ...) where SOURCE is either a source note, or
+;; directly a file name. Also, CCL may record logical pathnames (e.g. for
+;; files loaded from Quicklisp), which would never be EQUAL to the physical
+;; ones that ASDF knows about, so we need to translate them.
+#+ccl
+(defun ccl-source-pathname (sources)
+  "Return the physical pathname of the first of CCL's SOURCES, or NIL."
+  (when-let* ((source (second (first sources)))
+	      (file (if (ccl:source-note-p source)
+		      (ccl:source-note-filename source)
+		      source)))
+    (translate-logical-pathname (pathname file))))
+
 ;; #### PORTME.
 (defun source-by-name (name type)
   "Return source pathname for NAMEd object of TYPE."
+  #+sbcl
   (when-let (sources (sb-introspect:find-definition-sources-by-name name type))
-    (sb-introspect:definition-source-pathname (first sources))))
+    (sb-introspect:definition-source-pathname (first sources)))
+  ;; #### NOTE: CCL records setf expanders under the accessor's name.
+  #+ccl
+  (ccl-source-pathname
+   (ccl:find-definition-sources
+       (if (and (eq type :setf-expander) (consp name)) (second name) name)
+     (ecase type
+       (:constant 'ccl::constant)
+       (:variable 'variable)
+       (:symbol-macro 'ccl::symbol-macro)
+       (:setf-expander 'ccl::setf-expander)
+       (:method-combination 'method-combination)
+       (:type 'type)
+       (:structure 'structure)))))
 
 ;; #### PORTME.
 (defun source-by-object (object)
   "Return OBJECT's source pathname."
+  #+sbcl
   (when-let (source (sb-introspect:find-definition-source object))
-    (sb-introspect:definition-source-pathname source)))
+    (sb-introspect:definition-source-pathname source))
+  ;; #### NOTE: CCL doesn't record the source of structure classes (nor of
+  ;; typed structure descriptions) under the object itself, but only under the
+  ;; structure's name.
+  #+ccl
+  (ccl-source-pathname
+   (typecase object
+     (structure-class
+      (ccl:find-definition-sources (class-name object) 'structure))
+     (simple-vector
+      (ccl:find-definition-sources (ccl::sd-name object) 'structure))
+     (otherwise (ccl:find-definition-sources object)))))
+
+;; #### PORTME.
+(defun variable-kind (symbol)
+  "Return SYMBOL's variable kind.
+Only :constant, :special, and :macro (for symbol macros) are of interest."
+  #+sbcl
+  (sb-int:info :variable :kind symbol)
+  #+ccl
+  (cond ((constantp symbol) :constant)
+	((ccl::proclaimed-special-p symbol) :special)
+	((nth-value 1 (macroexpand-1 symbol)) :macro)))
+
+;; #### PORTME.
+(defun setf-expander (symbol)
+  "Return SYMBOL's setf expander, or NIL.
+A short form expander is a list the CAR of which is the name of its update
+function."
+  #+sbcl
+  (sb-int:info :setf :expander symbol)
+  ;; #### NOTE: for the short form of DEFSETF, CCL only stores the name of the
+  ;; update function, so we wrap it in a list.
+  #+ccl
+  (let ((expander (ccl::%setf-method symbol)))
+    (if (and expander (symbolp expander)) (list expander) expander)))
+
+;; #### PORTME.
+(defun function-lambda-list (function)
+  "Return FUNCTION's lambda list.
+FUNCTION may be a function, a generic function, or a macro function."
+  #+sbcl
+  (sb-introspect:function-lambda-list function)
+  ;; #### WARNING: CCL only keeps the lambda lists of macros (by name) and
+  ;; generic functions. For ordinary functions, it reconstructs one from the
+  ;; compiled code (which loses default values, and supplied-p parameters).
+  ;; For compiler macros, we cannot get it at all, so we return NIL.
+  #+ccl
+  (let ((name (ccl:function-name function)))
+    (cond ((and (consp name) (eq (first name) 'compiler-macro-function))
+	   nil)
+	  ((and (symbolp name) (eq function (macro-function name)))
+	   (values (ccl:arglist name)))
+	  (t
+	   (values (ccl:arglist function))))))
+
+;; #### PORTME.
+(defun combination-by-name (name)
+  "Return the method combination object for NAME, or NIL.
+This object represents the method combination as a general entity, as opposed
+to any of its instantiations with specific options."
+  #+sbcl
+  (gethash name sb-pcl::**method-combinations**)
+  ;; #### NOTE: in CCL, this is an information vector, except for the standard
+  ;; method combination, which doesn't have any (and is a regular instance).
+  #+ccl
+  (if (eq name 'standard)
+    ccl::*standard-method-combination*
+    (ccl::method-combination-info name)))
+
+;; #### NOTE: CCL's structure descriptions (CCL::SD-... accessors) are used for
+;; both typed and CLOS structures. They don't have a dedicated object
+;; representing a slot, and the reader names are kept in a separate list, so
+;; we reconstruct slot descriptions for them.
+#+ccl
+(defun structure-slots (description)
+  "Return structure DESCRIPTION's slots.
+Each slot is a list of the form (NAME TYPE READER-NAME)."
+  (mapcar (lambda (slot reader-name)
+	    (list (ccl::ssd-name slot) (ccl::ssd-type slot) reader-name))
+      ;; Typed structures may have an extra slot for their name, which is
+      ;; identified by a number instead of a symbol.
+      (remove-if-not #'symbolp (ccl::sd-slots description)
+		     :key (lambda (slot) (ccl::ssd-name slot)))
+    (ccl::sd-refnames description)))
 
 
 

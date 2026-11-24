@@ -279,7 +279,8 @@ The same goes for string names, which SBCL gives to some internal functions."
       (symbol name)
       (string nil)
       (list (case (first name)
-	      ((macro-function compiler-macro) (second name))
+	      ((macro-function compiler-macro #+ccl compiler-macro-function)
+	       (second name))
 	      (setf name)
 	      (otherwise nil))))))
 
@@ -290,17 +291,17 @@ The same goes for string names, which SBCL gives to some internal functions."
 Domesticity is defined in relation to domestic PACKAGES and PATHNAMES; see
 `domesticp'."
   ;; Constants.
-  (when (and (eql (sb-int:info :variable :kind symbol) :constant)
+  (when (and (eql (variable-kind symbol) :constant)
 	     (domesticp symbol (source-by-name symbol :constant)
 			packages pathnames))
     (endpush (make-constant-definition symbol) definitions))
   ;; Special variables.
-  (when (and (eql (sb-int:info :variable :kind symbol) :special)
+  (when (and (eql (variable-kind symbol) :special)
 	     (domesticp symbol (source-by-name symbol :variable)
 			packages pathnames))
     (endpush (make-special-definition symbol) definitions))
   ;; Symbol macros.
-  (when (and (eql (sb-int:info :variable :kind symbol) :macro)
+  (when (and (eql (variable-kind symbol) :macro)
 	     (domesticp symbol (source-by-name symbol :symbol-macro)
 			packages pathnames))
     (endpush (make-symbol-macro-definition symbol) definitions))
@@ -337,7 +338,7 @@ Domesticity is defined in relation to domestic PACKAGES and PATHNAMES; see
 	  (endpush (make-compiler-macro-alias-definition symbol t)
 		   definitions)))))
   ;; Setf expanders.
-  (when-let (expander (sb-int:info :setf :expander symbol))
+  (when-let (expander (setf-expander symbol))
     (when (domesticp symbol (source-by-name symbol :setf-expander)
 		     packages pathnames)
       (endpush (make-expander-definition symbol expander) definitions)))
@@ -419,7 +420,11 @@ Domesticity is defined in relation to domestic PACKAGES and PATHNAMES; see
   ;; SOURCE-BY-NAME protocol, NOT by the SOURCE-BY-OBJECT one. Indeed,
   ;; the later would return the method-combination-info structure's source
   ;; information, which is an internal SBCL file.
-  (when-let (combination (gethash symbol sb-pcl::**method-combinations**))
+  ;;
+  ;; CCL has a similar registry of method combination information, but it
+  ;; doesn't contain actual method combination objects. See
+  ;; COMBINATION-BY-NAME.
+  (when-let (combination (combination-by-name symbol))
     (when (domesticp symbol (source-by-name symbol :method-combination)
 		     packages pathnames)
       (endpush (make-combination-definition symbol combination) definitions)))
@@ -454,7 +459,10 @@ Domesticity is defined in relation to domestic PACKAGES and PATHNAMES; see
 	    (endpush slot-definition definitions))))))
   ;; Typed structures.
   ;; #### NOTE: see the comment about SOURCE-PATHNAME in symbol.lisp.
-  (when-let (structure (sb-int:info :typed-structure :info symbol))
+  (when-let (structure #+sbcl (sb-int:info :typed-structure :info symbol)
+		       #+ccl (when-let (description
+					(gethash symbol ccl::%defstructs%))
+			       (when (ccl::sd-type description) description)))
     (let ((source (source-by-name symbol :structure)))
       (when (domesticp symbol source packages pathnames)
 	(let ((structure-definition
@@ -463,7 +471,8 @@ Domesticity is defined in relation to domestic PACKAGES and PATHNAMES; see
 	  (dolist (slot-definition (direct-slots structure-definition))
 	    (endpush slot-definition definitions))))))
   ;; Types.
-  (when-let (expander (sb-int:info :type :expander symbol))
+  (when-let (expander #+sbcl (sb-int:info :type :expander symbol)
+		      #+ccl (ccl::%deftype-expander symbol))
     (when (domesticp symbol (source-by-name symbol :type)
 		     packages pathnames)
       (endpush (make-type-definition symbol expander) definitions)))

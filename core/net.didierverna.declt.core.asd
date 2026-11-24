@@ -41,7 +41,7 @@ complete description of Declt, see the `net.didierverna.declt' system."
   :license "BSD"
    :version (:read-file-line #p"../make/version.make"
 	     :at (1 (lambda (str) (subseq str 19))))
-  :if-feature :sbcl
+  :if-feature (:or :sbcl :ccl)
   :depends-on ((:feature :sbcl (:require :sb-introspect))
 	       :net.didierverna.declt.setup :net.didierverna.declt.assess)
   :serial t

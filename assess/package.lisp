@@ -32,7 +32,7 @@
   (:documentation "The Declt assessment library's package.")
   (:use :cl :net.didierverna.declt.setup)
   ;; #### PORTME.
-  (:import-from #+sbcl :sb-mop
+  (:import-from #+sbcl :sb-mop #+ccl :ccl
     :generic-function-name
     :generic-function-methods
     :generic-function-method-combination

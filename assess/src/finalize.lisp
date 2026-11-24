@@ -189,7 +189,7 @@ DEFINITIONS in the process."
 			      (eq (definition-symbol candidate) name)))
 		       definitions)))
 	(unless (or expander-for (foreignp definition))
-	  (when-let (expander (sb-int:info :setf :expander name))
+	  (when-let (expander (setf-expander name))
 	    (setq expander-for
 		  (destabilize definitions
 		    (make-expander-definition
@@ -315,10 +315,13 @@ DEFINITIONS in the process."
 (defmethod stabilize progn
     ((definition generic-function-definition) definitions packages pathnames
      &aux (combination-type-name
+	   #+sbcl
 	   (sb-pcl::method-combination-type-name
+	    (generic-function-method-combination (generic definition)))
+	   #+ccl
+	   (ccl::method-combination-name
 	    (generic-function-method-combination (generic definition))))
-	  (combination
-	   (gethash combination-type-name sb-pcl::**method-combinations**)))
+	  (combination (combination-by-name combination-type-name)))
   "Compute generic function DEFINITION's methods, and combination definition."
   (setf (methods definition)
 	(retain (generic definition) definitions
@@ -355,10 +358,7 @@ DEFINITIONS in the process."
   "Compute method combination DEFINITION's users."
   ;; #### NOTE: a case could be made to avoid rebuilding the whole list here,
   ;; and only add what's missing, but I don't think it's worth the trouble.
-  (mapc
-      (lambda (cache-entry)
-	(sb-impl::map-hashset
-	 (lambda (generic)
+  (flet ((add-client (generic)
 	   (let ((client (find-definition generic definitions)))
 	     (cond (client
 		    (endpush client clients))
@@ -367,10 +367,25 @@ DEFINITIONS in the process."
 		     (destabilize definitions
 		       (new-generic-definition
 			generic packages pathnames))
-		     clients)))))
-	 (sb-pcl::method-combination-%generic-functions
-	  (cdr cache-entry))))
-    (sb-pcl::method-combination-info-cache (combination definition)))
+		     clients))))))
+    #+sbcl
+    (mapc
+	(lambda (cache-entry)
+	  (sb-impl::map-hashset
+	   #'add-client
+	   (sb-pcl::method-combination-%generic-functions
+	    (cdr cache-entry))))
+      (sb-pcl::method-combination-info-cache (combination definition)))
+    ;; #### NOTE: CCL's registry of the generic functions using a method
+    ;; combination is not maintained, so we have to scan all of them. Some
+    ;; internal ones don't have a method combination at all.
+    #+ccl
+    (dolist (generic (ccl::population-data ccl::%all-gfs%))
+      (when (and (slot-boundp generic 'method-combination)
+		 (eq (ccl::method-combination-name
+		      (generic-function-method-combination generic))
+		     (definition-symbol definition)))
+	(add-client generic))))
   (setf (clients definition) clients))
 
 ;; #### PORTME.
@@ -380,11 +395,15 @@ DEFINITIONS in the process."
   ;; method combination info structure. However, since we have made sure that
   ;; there is at least one actual combination object in the cache, in
   ;; MAKE-COMBINATION-DEFINITION, we can just look into that one.
-   &aux (name (sb-pcl::short-combination-operator
+   &aux (name #+sbcl
+	      (sb-pcl::short-combination-operator
 	       (cdr
 		(first
 		 (sb-pcl::method-combination-info-cache
-		  (combination definition)))))))
+		  (combination definition)))))
+	      #+ccl
+	      (getf (ccl::mci.options (combination definition)) :operator
+		    (definition-symbol definition))))
   "Compute short combination DEFINITION's standalone combinator definition."
   (unless (standalone-combinator definition)
     (setf (standalone-combinator definition)
@@ -521,7 +540,8 @@ DEFINITIONS in the process."
 (defun stabilize-clos-classoid-slot
     (definition definitions packages pathnames
      &aux (slot (slot definition))
-	  (classoid (sb-pcl::slot-definition-class slot)))
+	  (classoid #+sbcl (sb-pcl::slot-definition-class slot)
+		    #+ccl (ccl::slot-definition-class slot)))
   "Compute CLOS classoid slot DEFINITION's reader and writer definitions.
 This function is used for regular class and condition slots."
   ;; #### NOTE: a case could be made to avoid rebuilding the whole list here,
@@ -614,7 +634,17 @@ This function is used for regular class and condition slots."
   ;; to perform one test each time.
   (unless (readers definition)
     (let* ((reader-name
-	     (sb-pcl::slot-definition-defstruct-accessor-symbol slot))
+	     #+sbcl
+	     (sb-pcl::slot-definition-defstruct-accessor-symbol slot)
+	     ;; #### NOTE: CCL doesn't have this, so we need to go through the
+	     ;; structure's reader names, by position.
+	     #+ccl
+	     (third
+	      (find (slot-definition-name slot)
+		  (structure-slots
+		   (gethash (class-name (ccl::slot-definition-class slot))
+			    ccl::%defstructs%))
+		:key #'first)))
 	   (writer-name `(setf ,reader-name))
 	   (reader (fdefinition reader-name))
 	   (writer (when (fboundp writer-name) (fdefinition writer-name)))
@@ -656,7 +686,8 @@ This function is used for regular class and condition slots."
     ((definition clos-slot-definition) definitions packages pathnames)
   "Compute CLOS slot DEFINITION's reader and writer definitions."
   (typecase (slot definition)
-    (sb-pcl::structure-direct-slot-definition
+    (#+sbcl sb-pcl::structure-direct-slot-definition
+     #+ccl ccl::structure-direct-slot-definition
      (stabilize-clos-structure-slot definition definitions packages pathnames))
     (otherwise
      (stabilize-clos-classoid-slot definition definitions packages pathnames))))
@@ -679,7 +710,8 @@ This function is used for regular class and condition slots."
   ;; to perform one test each time (on the reader, though, because a slot may
   ;; be read-only).
   (unless (readers definition)
-    (let* ((reader-name (sb-kernel:dsd-accessor-name slot))
+    (let* ((reader-name #+sbcl (sb-kernel:dsd-accessor-name slot)
+			#+ccl (third slot))
 	   (writer-name `(setf ,reader-name))
 	   (reader (fdefinition reader-name))
 	   (writer (when (fboundp writer-name) (fdefinition writer-name)))
