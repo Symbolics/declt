@@ -78,6 +78,8 @@
     :system-source-directory
     :system-source-file)
   (:export
+    ;; From src/util.lisp:
+    :source-position-line
     ;; From src/definition.lisp:
     :definition :object :uid :source-file :foreignp
     :name :docstring :public-definitions :private-definitions

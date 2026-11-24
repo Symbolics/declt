@@ -590,7 +590,8 @@ SYSTEM-NAME is an ASDF system designator."
 	  introduction
 	  conclusion
      &aux (system (load-system system-name))
-	  (report (make-report system-name)))
+	  (report (make-report system-name))
+	  #+sbcl (*toplevel-form-positions* (make-hash-table :test #'equal)))
   "Extract and return documentation information for ASDF SYSTEM-NAME.
 The documentation information is returned in a REPORT structure, which see.
 

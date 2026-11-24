@@ -45,19 +45,113 @@
 ;; ones that ASDF knows about, so we need to translate them.
 #+ccl
 (defun ccl-source-pathname (sources)
-  "Return the physical pathname of the first of CCL's SOURCES, or NIL."
+  "Return the physical pathname of the first of CCL's SOURCES, or NIL.
+The second value is the position of the toplevel form defining it, if known.
+See `source-by-name' for the meaning of positions."
   (when-let* ((source (second (first sources)))
 	      (file (if (ccl:source-note-p source)
 		      (ccl:source-note-filename source)
 		      source)))
-    (translate-logical-pathname (pathname file))))
+    (values (translate-logical-pathname (pathname file))
+	    (when (ccl:source-note-p source)
+	      (ccl:source-note-start-pos
+	       (ccl::source-note-toplevel-note source))))))
+
+;; #### NOTE: SBCL doesn't reliably give the position of a definition. Some
+;; sources have a character offset (actually, a byte offset), but it points to
+;; the end of the previous form, and the others have none. However, all of
+;; them have the number of the toplevel form, so we find its position by
+;; reading the file. The positions are cached for the duration of an
+;; assessment (see `assess'), which binds this variable.
+#+sbcl
+(defvar *toplevel-form-positions* nil
+  "A hash table mapping Lisp file pathnames to toplevel form positions.")
+
+#+sbcl
+(defun skip-to-form (stream)
+  "Skip whitespace, comments and false feature conditionals in STREAM.
+Return the position of the next form."
+  (loop :for position := (progn (peek-char t stream nil)
+				(file-position stream))
+	:for char := (read-char stream nil)
+	:do (cond ((eql char #\;)
+		   (read-line stream nil))
+		  ((and (eql char #\#) (eql (peek-char nil stream nil) #\|))
+		   (read-char stream)
+		   (funcall (get-dispatch-macro-character #\# #\|)
+		     stream #\| nil))
+		  ((and (eql char #\#)
+			(member (peek-char nil stream nil) '(#\+ #\-)))
+		   (let* ((sign (read-char stream))
+			  (featurep
+			    (sb-int:featurep
+			     (let ((*package* (find-package :keyword)))
+			       (read stream)))))
+		     (unless (if (char= sign #\+) featurep (not featurep))
+		       (let ((*read-suppress* t))
+			 (read stream)))))
+		  (t
+		   (file-position stream position)
+		   (return position)))))
+
+;; #### WARNING: forms are read with the standard readtable, except that #. is
+;; inert (its form is read but not evaluated). Symbols are read into a
+;; temporary package, so that we don't pollute the ones that we are looking
+;; at. Reading stops at the first error, in which case the positions found so
+;; far are returned.
+#+sbcl
+(defun pathname-toplevel-form-positions
+    (pathname &aux (*package* (make-package (symbol-name (gensym)) :use nil))
+		   (*readtable* (copy-readtable nil))
+		   (positions (make-array 0 :adjustable t :fill-pointer t)))
+  "Return a vector of the positions of Lisp file PATHNAME's toplevel forms."
+  (set-dispatch-macro-character #\# #\.
+    (lambda (stream subchar arg)
+      (declare (ignore subchar arg))
+      (read stream t nil t)
+      nil))
+  (unwind-protect
+      (ignore-errors
+	(with-open-file (stream pathname :external-format :utf-8)
+	  (loop :for position := (skip-to-form stream)
+		:until (eq (read stream nil stream) stream)
+		:do (vector-push-extend position positions))))
+    (delete-package *package*))
+  positions)
+
+#+sbcl
+(defun toplevel-form-position (pathname number)
+  "Return the position of the NUMBERth toplevel form in Lisp file PATHNAME."
+  (let ((positions (or (when *toplevel-form-positions*
+			 (gethash pathname *toplevel-form-positions*))
+		       (let ((positions (pathname-toplevel-form-positions
+					 pathname)))
+			 (when *toplevel-form-positions*
+			   (setf (gethash pathname *toplevel-form-positions*)
+				 positions))
+			 positions))))
+    (when (and number (< number (length positions)))
+      (aref positions number))))
+
+#+sbcl
+(defun sbcl-source-pathname (source)
+  "Return the pathname of SBCL's definition SOURCE, or NIL.
+The second value is the position of the toplevel form defining it, if known.
+See `source-by-name' for the meaning of positions."
+  (when-let (pathname (sb-introspect:definition-source-pathname source))
+    (values pathname
+	    (toplevel-form-position
+	     pathname
+	     (first (sb-introspect:definition-source-form-path source))))))
 
 ;; #### PORTME.
 (defun source-by-name (name type)
-  "Return source pathname for NAMEd object of TYPE."
+  "Return source pathname and position for NAMEd object of TYPE.
+The position, which may be NIL, is the byte offset in the file of the start of
+the toplevel form defining the object."
   #+sbcl
   (when-let (sources (sb-introspect:find-definition-sources-by-name name type))
-    (sb-introspect:definition-source-pathname (first sources)))
+    (sbcl-source-pathname (first sources)))
   ;; #### NOTE: CCL records setf expanders under the accessor's name.
   #+ccl
   (ccl-source-pathname
@@ -74,10 +168,11 @@
 
 ;; #### PORTME.
 (defun source-by-object (object)
-  "Return OBJECT's source pathname."
+  "Return OBJECT's source pathname and position.
+See `source-by-name' for more information."
   #+sbcl
   (when-let (source (sb-introspect:find-definition-source object))
-    (sb-introspect:definition-source-pathname source))
+    (sbcl-source-pathname source))
   ;; #### NOTE: CCL doesn't record the source of structure classes (nor of
   ;; typed structure descriptions) under the object itself, but only under the
   ;; structure's name.
@@ -89,6 +184,16 @@
      (simple-vector
       (ccl:find-definition-sources (ccl::sd-name object) 'structure))
      (otherwise (ccl:find-definition-sources object)))))
+
+(defun source-position-line (pathname position)
+  "Return the line number (starting at 1) of POSITION in file PATHNAME.
+POSITION is a byte offset, as returned by `source-by-name'. Return NIL if
+POSITION is NIL or beyond the end of the file."
+  (when (and pathname position)
+    (with-open-file (stream pathname :element-type '(unsigned-byte 8))
+      (let ((bytes (make-array position :element-type '(unsigned-byte 8))))
+	(when (= (read-sequence bytes stream) position)
+	  (1+ (count (char-code #\Newline) bytes)))))))
 
 ;; #### PORTME.
 (defun variable-kind (symbol)
