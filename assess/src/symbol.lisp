@@ -721,7 +721,7 @@ These are conditions, structures, and classes."))
   "Compute classoid DEFINITION's foreign status."
   (setf (foreignp definition)
 	(not
-	 (domesticp (class-name classoid) (source-by-object classoid)
+	 (domesticp (definition-symbol definition) (source-pathname definition)
 	   packages pathnames))))
 
 ;; #### PORTME.
@@ -849,7 +849,7 @@ It is T for list structures, but may be something else for vector ones."
     ((definition typed-structure-definition)
      &key packages pathnames
      &aux (structure (definition-structure definition))
-	  (source (source-by-object structure)))
+	  (source (source-pathname definition)))
   "Compute typed structure DEFINITION's type, element type, and slots."
   (setf (structure-type definition) (sb-kernel:dd-type structure))
   (setf (element-type definition) (dd-element-type structure))
@@ -866,6 +866,14 @@ It is T for list structures, but may be something else for vector ones."
 (defmethod docstring ((definition typed-structure-definition))
   "Return typed structure DEFINITION's docstring."
   (sb-kernel::dd-doc (definition-structure definition)))
+
+;; #### WARNING: the source information must be retrieved with the
+;; SOURCE-BY-NAME protocol, NOT by the SOURCE-BY-OBJECT one. Indeed, the
+;; latter would return the defstruct-description structure's source
+;; information, which is an internal SBCL file.
+(defmethod source-pathname ((definition typed-structure-definition))
+  "Return typed structure DEFINITION's source pathname."
+  (definition-source-by-name definition :structure))
 
 
 
