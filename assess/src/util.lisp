@@ -185,6 +185,16 @@ See `source-by-name' for more information."
       (ccl:find-definition-sources (ccl::sd-name object) 'structure))
      (otherwise (ccl:find-definition-sources object)))))
 
+(defun source-position-line (pathname position)
+  "Return the line number (starting at 1) of POSITION in file PATHNAME.
+POSITION is a byte offset, as returned by `source-by-name'. Return NIL if
+POSITION is NIL or beyond the end of the file."
+  (when (and pathname position)
+    (with-open-file (stream pathname :element-type '(unsigned-byte 8))
+      (let ((bytes (make-array position :element-type '(unsigned-byte 8))))
+	(when (= (read-sequence bytes stream) position)
+	  (1+ (count (char-code #\Newline) bytes)))))))
+
 ;; #### PORTME.
 (defun variable-kind (symbol)
   "Return SYMBOL's variable kind.
