@@ -270,12 +270,14 @@ insensitive) for one of the corresponding systems."
 (defun funcoid-name (funcoid)
   "Return FUNCOID's name, or NIL.
 FUNCOID may be a function, a macro function, or a compiler macro function.
-Lambda expression are not considered as proper names, so NIL is returned."
+Lambda expression are not considered as proper names, so NIL is returned.
+The same goes for string names, which SBCL gives to some internal functions."
   (multiple-value-bind (lambda-expression closure-p name)
       (function-lambda-expression funcoid)
     (declare (ignore lambda-expression closure-p))
     (etypecase name
       (symbol name)
+      (string nil)
       (list (case (first name)
 	      ((macro-function compiler-macro) (second name))
 	      (setf name)
