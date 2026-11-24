@@ -45,16 +45,23 @@
 ;; ones that ASDF knows about, so we need to translate them.
 #+ccl
 (defun ccl-source-pathname (sources)
-  "Return the physical pathname of the first of CCL's SOURCES, or NIL."
+  "Return the physical pathname of the first of CCL's SOURCES, or NIL.
+The second value is the position of the toplevel form defining it, if known.
+See `source-by-name' for the meaning of positions."
   (when-let* ((source (second (first sources)))
 	      (file (if (ccl:source-note-p source)
 		      (ccl:source-note-filename source)
 		      source)))
-    (translate-logical-pathname (pathname file))))
+    (values (translate-logical-pathname (pathname file))
+	    (when (ccl:source-note-p source)
+	      (ccl:source-note-start-pos
+	       (ccl::source-note-toplevel-note source))))))
 
 ;; #### PORTME.
 (defun source-by-name (name type)
-  "Return source pathname for NAMEd object of TYPE."
+  "Return source pathname and position for NAMEd object of TYPE.
+The position, which may be NIL, is the byte offset in the file of the start of
+the toplevel form defining the object."
   #+sbcl
   (when-let (sources (sb-introspect:find-definition-sources-by-name name type))
     (sb-introspect:definition-source-pathname (first sources)))
@@ -74,7 +81,8 @@
 
 ;; #### PORTME.
 (defun source-by-object (object)
-  "Return OBJECT's source pathname."
+  "Return OBJECT's source pathname and position.
+See `source-by-name' for more information."
   #+sbcl
   (when-let (source (sb-introspect:find-definition-source object))
     (sb-introspect:definition-source-pathname source))

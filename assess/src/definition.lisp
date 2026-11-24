@@ -138,10 +138,12 @@ source file is considered foreign."
 ;; method returns the wrong information (it works on method-combination-info
 ;; structures for which the definition file is an SBCL specific one).
 (defgeneric source-pathname (definition)
-  (:documentation "Return DEFINITION's source pathname.")
+  (:documentation "Return DEFINITION's source pathname and position.
+See `source-by-name' for more information.")
   ;; #### PORTME.
   (:method (definition)
-    "Return DEFINITION's object source pathname (this is the default method)."
+    "Return DEFINITION's object source pathname and position.
+This is the default method."
     (source-by-object (object definition))))
 
 ;;; definition.lisp ends here
