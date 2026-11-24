@@ -122,8 +122,10 @@ FUNCTION may be a function, a generic function, or a macro function."
   (sb-introspect:function-lambda-list function)
   ;; #### WARNING: CCL only keeps the lambda lists of macros (by name) and
   ;; generic functions. For ordinary functions, it reconstructs one from the
-  ;; compiled code (which loses default values, and supplied-p parameters).
-  ;; For compiler macros, we cannot get it at all, so we return NIL.
+  ;; compiled code (which loses default values, and supplied-p parameters),
+  ;; unless the definition was saved, which happens when the code is compiled
+  ;; with CCL:*SAVE-DEFINITIONS* (or CCL:*FASL-SAVE-DEFINITIONS* for files)
+  ;; set to T. For compiler macros, we cannot get it at all, so we return NIL.
   #+ccl
   (let ((name (ccl:function-name function)))
     (cond ((and (consp name) (eq (first name) 'compiler-macro-function))
@@ -131,7 +133,10 @@ FUNCTION may be a function, a generic function, or a macro function."
 	  ((and (symbolp name) (eq function (macro-function name)))
 	   (values (ccl:arglist name)))
 	  (t
-	   (values (ccl:arglist function))))))
+	   (let ((expression (function-lambda-expression function)))
+	     (if (and (consp expression) (eq (first expression) 'lambda))
+	       (second expression)
+	       (values (ccl:arglist function))))))))
 
 ;; #### PORTME.
 (defun combination-by-name (name)
