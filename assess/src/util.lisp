@@ -134,6 +134,16 @@ FUNCTION may be a function, a generic function, or a macro function."
 	   (values (ccl:arglist function))))))
 
 ;; #### PORTME.
+(defun function-declared-type (name)
+  "Return the type specifier proclaimed for function NAME, or NIL.
+NAME may be a symbol or a SETF function name. Derived types are ignored."
+  #+sbcl
+  (when (eq (sb-int:info :function :where-from name) :declared)
+    (sb-kernel:type-specifier (sb-int:info :function :type name)))
+  #+ccl
+  (ccl::proclaimed-ftype name))
+
+;; #### PORTME.
 (defun combination-by-name (name)
   "Return the method combination object for NAME, or NIL.
 This object represents the method combination as a general entity, as opposed

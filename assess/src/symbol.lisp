@@ -442,7 +442,13 @@ DEFSETF, or DEFINE-SETF-EXPANDER."))
 
 (defabstract function-definition (setfable-funcoid-definition)
   ((object :initarg :function :reader definition-function)) ;; slot overload
-  (:documentation "Abstract root class for functions."))
+  (:documentation "Abstract root class for functions.
+All function definitions respond to the following public protocols, which see:
+- `declared-type'."))
+
+(defun declared-type (definition)
+  "Return function DEFINITION's declared type, or NIL."
+  (function-declared-type (name definition)))
 
 
 

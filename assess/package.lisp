@@ -96,7 +96,7 @@
     :expander-definition :expander :standalone-reader
     :short-expander-definition :standalone-writer :short-expander-definition-p
     :long-expander-definition
-    :function-definition :definition-function
+    :function-definition :definition-function :declared-type
     :ordinary-function-definition
     :ordinary-accessor-definition
     :ordinary-reader-definition :ordinary-writer-definition
