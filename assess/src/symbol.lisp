@@ -323,11 +323,10 @@ and methods for classes or conditions slots."))
 ;; #### PORTME.
 (defmethod lambda-list ((definition type-definition))
   "Return type DEFINITION's type lambda-list."
-  ;; #### WARNING: CCL doesn't keep this information, so we return NIL.
   #+sbcl
   (sb-introspect:deftype-lambda-list (definition-symbol definition))
   #+ccl
-  nil)
+  (recorded-lambda-list (expander definition)))
 
 
 
@@ -416,15 +415,13 @@ DEFSETF, or DEFINE-SETF-EXPANDER."))
 (defmethod lambda-list ((definition long-expander-definition)
 			&aux (expander (expander definition)))
   "Return long setf expander DEFINITION's expander function's lambda-list."
-  #+ccl
-  (declare (ignore expander))
-  ;; #### WARNING: CCL doesn't keep this information, so we return NIL.
   #+sbcl
   (etypecase expander
     (list (sb-introspect:function-lambda-list (cdr expander)))
     (function (sb-introspect:function-lambda-list expander)))
   #+ccl
-  nil)
+  (when (functionp expander)
+    (recorded-lambda-list expander)))
 
 
 (defun make-expander-definition (symbol expander &optional foreign)
@@ -578,11 +575,19 @@ These are generic functions using this combination."
 ;; #### PORTME.
 (defmethod lambda-list ((definition combination-definition))
   "Return method combination DEFINITION's lambda-list."
-  ;; #### WARNING: CCL doesn't keep this information, so we return NIL.
   #+sbcl
   (sb-pcl::method-combination-info-lambda-list (combination definition))
+  ;; #### NOTE: in CCL, the options of a long form method combination are a
+  ;; cons, the CDR of which is the expander function. The lambda list of the
+  ;; short form is the one the standard specifies.
   #+ccl
-  nil)
+  (let ((combination (combination definition)))
+    (cond ((typep definition 'short-combination-definition)
+	   '(&optional (order :most-specific-first)))
+	  ((and (vectorp combination)
+		(consp (ccl::mci.options combination))
+		(functionp (cdr (ccl::mci.options combination))))
+	   (recorded-lambda-list (cdr (ccl::mci.options combination)))))))
 
 
 ;; #### WARNING: the CLHS specifies that the :operator argument to

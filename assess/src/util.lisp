@@ -114,6 +114,26 @@ function."
   (let ((expander (ccl::%setf-method symbol)))
     (if (and expander (symbolp expander)) (list expander) expander)))
 
+;; #### NOTE: recent versions of CCL keep the lambda list of a compiler macro,
+;; a type, a long form setf expander, or a long form method combination, as
+;; written, with the expander function that the definition creates. Older
+;; versions don't, in which case we have nothing better than NIL: CCL:ARGLIST
+;; would only return the arguments of the expander function itself. As SBCL
+;; does, we remove the &whole and &environment parameters.
+#+ccl
+(defun recorded-lambda-list (function)
+  "Return the lambda list recorded with expander FUNCTION, or NIL."
+  (when (typep function 'ccl:compiled-lexical-closure)
+    (setq function (ccl::closure-function function)))
+  (let ((lambda-list (getf (ccl::%lfun-info function) 'ccl::arglist '%none)))
+    (unless (eq lambda-list '%none)
+      (do ((tail lambda-list (cdr tail))
+	   (result '()))
+	  ((atom tail) (nreconc result tail))
+	(if (member (car tail) '(&whole &environment))
+	  (setq tail (cdr tail))
+	  (push (copy-tree (car tail)) result))))))
+
 ;; #### PORTME.
 (defun function-lambda-list (function)
   "Return FUNCTION's lambda list.
@@ -125,11 +145,12 @@ FUNCTION may be a function, a generic function, or a macro function."
   ;; compiled code (which loses default values, and supplied-p parameters),
   ;; unless the definition was saved, which happens when the code is compiled
   ;; with CCL:*SAVE-DEFINITIONS* (or CCL:*FASL-SAVE-DEFINITIONS* for files)
-  ;; set to T. For compiler macros, we cannot get it at all, so we return NIL.
+  ;; set to T. For compiler macros, we only get it from recent versions of
+  ;; CCL (see `recorded-lambda-list').
   #+ccl
   (let ((name (ccl:function-name function)))
     (cond ((and (consp name) (eq (first name) 'compiler-macro-function))
-	   nil)
+	   (recorded-lambda-list function))
 	  ((and (symbolp name) (eq function (macro-function name)))
 	   (values (ccl:arglist name)))
 	  (t
