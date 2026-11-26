@@ -911,6 +911,7 @@ All CLOS slot definitions respond to the following public protocols, which
 see:
 - `allocation',
 - `initform',
+- `initfunction',
 - `initargs'."))
 
 (defun make-clos-slot-definition (slot &optional foreign)
@@ -936,6 +937,10 @@ see:
 (defun initform (definition)
   "Return CLOS slot DEFINITION's initform."
   (slot-definition-initform (slot definition)))
+
+(defun initfunction (definition)
+  "Return CLOS slot DEFINITION's initfunction."
+  (slot-definition-initfunction (slot definition)))
 
 (defun initargs (definition)
   "Return CLOS slot DEFINITION's initargs."

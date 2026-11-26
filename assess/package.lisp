@@ -49,6 +49,7 @@
     :slot-definition-type
     :slot-definition-allocation
     :slot-definition-initform
+    :slot-definition-initfunction
     :slot-definition-initargs
     :slot-definition-readers
     :slot-definition-writers
@@ -123,7 +124,7 @@
     :clos-structure-definition :direct-superstructures :direct-substructures
     :typed-structure-definition :structure-type :element-type
     :slot-definition :slot :owner :readers :writers :value-type
-    :clos-slot-definition :allocation :initform :initargs
+    :clos-slot-definition :allocation :initform :initfunction :initargs
     :typed-structure-slot-definition
     :alias-definition :setfp :referee
     :macro-alias-definition
