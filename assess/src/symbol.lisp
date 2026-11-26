@@ -300,6 +300,16 @@ and methods for classes or conditions slots."))
   (apply #'make-instance 'compiler-macro-definition
 	 :symbol symbol :compiler-macro compiler-macro keys))
 
+;; #### NOTE: CCL attaches a compiler macro's docstring to its name, not to
+;; the compiler macro function (only recent versions of CCL keep it at all).
+#+ccl
+(defmethod docstring ((definition compiler-macro-definition))
+  "Return compiler macro DEFINITION's docstring."
+  (documentation (if (setfp definition)
+		   `(setf ,(definition-symbol definition))
+		   (definition-symbol definition))
+		 'compiler-macro))
+
 
 
 ;; Types
