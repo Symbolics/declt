@@ -37,6 +37,7 @@
     :generic-function-methods
     :generic-function-method-combination
     :eql-specializer
+    :eql-specializer-object
     :specializer-direct-methods
     :method-generic-function
     :method-lambda-list
@@ -109,6 +110,7 @@
     :identity-with-one-argument
     :long-combination-definition
     :method-definition :definition-method :owner :specializers
+    :eql-specializer :eql-specializer-object
     :method-definition-p :qualifiers
     :accessor-method-definition
     :reader-method-definition :reader-method-definition-p
